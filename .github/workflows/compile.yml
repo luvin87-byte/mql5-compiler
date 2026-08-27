@@ -1,33 +1,42 @@
-- name: Compile MQL5
-  shell: pwsh
-  run: |
-    $root = $env:MT_PATH
-    $mte  = Join-Path $root 'metaeditor64.exe'
-    Write-Host "MT_PATH=$root"
-    if (-not (Test-Path $mte)) { throw "Compiler missing: $mte" }
+name: Build MQL5
 
-    $src = Join-Path $pwd 'SENTINEL1_26.mq5'
-    if (-not (Test-Path $src)) { throw "Cannot find $src" }
+on:
+  workflow_dispatch:
 
-    $trade = Get-ChildItem -Path $root, "$env:APPDATA\MetaQuotes" -Recurse -Filter 'Trade.mqh' -ErrorAction SilentlyContinue |
-      Select-Object -First 1
-    if (-not $trade) { throw "Standard library not found (Trade.mqh)" }
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Compile MQL5
+        shell: pwsh
+        run: |
+          $root = $env:MT_PATH
+          $mte  = Join-Path $root 'metaeditor64.exe'
+          Write-Host "MT_PATH=$root"
+          if (-not (Test-Path $mte)) { throw "Compiler missing: $mte" }
 
-    $inc = $trade.Directory.Parent.Parent.FullName
-    Write-Host "Trade.mqh: $($trade.FullName)"
-    Write-Host "Using include dir: $inc"
+          $src = Join-Path $pwd 'SENTINEL1_26.mq5'
+          if (-not (Test-Path $src)) { throw "Cannot find $src" }
 
-    $log = Join-Path $pwd 'mql.log'
-    $cmd = '"{0}" /compile:"{1}" /inc:"{2}" /log:"{3}"' -f $mte, $src, $inc, $log
-    Write-Host "Running: $cmd"
-    cmd /c $cmd
-    Write-Host "metaeditor exit: $LASTEXITCODE"
+          $trade = Get-ChildItem -Path $root, "$env:APPDATA\MetaQuotes" -Recurse -Filter 'Trade.mqh' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $trade) { throw "Standard library not found (Trade.mqh)" }
 
-    if (Test-Path $log) {
-      Write-Host "===== compile log ====="
-      Get-Content $log -Encoding Unicode
-    }
+          $inc = $trade.Directory.Parent.Parent.FullName
+          Write-Host "Trade.mqh: $($trade.FullName)"
+          Write-Host "Using include dir: $inc"
 
-    $ex5 = [IO.Path]::ChangeExtension($src, '.ex5')
-    if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
-    Write-Host ('Built {0} ({1} bytes)' -f $ex5, (Get-Item $ex5).Length)
+          $log = Join-Path $pwd 'mql.log'
+          $cmd = '"{0}" /compile:"{1}" /inc:"{2}" /log:"{3}"' -f $mte, $src, $inc, $log
+          Write-Host "Running: $cmd"
+          cmd /c $cmd
+          Write-Host "metaeditor exit: $LASTEXITCODE"
+
+          if (Test-Path $log) {
+            Write-Host "===== compile log ====="
+            Get-Content $log -Encoding Unicode
+          }
+
+          $ex5 = [IO.Path]::ChangeExtension($src, '.ex5')
+          if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
+          Write-Host ('Built {0} ({1} bytes)' -f $ex5, (Get-Item $ex5).Length)

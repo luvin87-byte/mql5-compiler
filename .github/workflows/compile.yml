@@ -7,13 +7,18 @@ on:
 
 jobs:
   compile:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      - name: Setup MetaTrader 5
+        uses: fx31337/mql-setup-action@v1
+        with:
+          mt-version: 5
+
       - name: Compile MQL5
-        uses: fx31337/mql-compile-action@master
+        uses: fx31337/mql-compile-action@v2
         with:
           include: '.'
           init-platform: true

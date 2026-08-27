@@ -7,15 +7,16 @@ on:
 
 jobs:
   compile:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Compile MQL5
-        uses: mql-actions/mql-compile-action@v1
+        uses: fx31337/mql-compile-action@v2
         with:
           include: '.'
+          init-platform: true
 
       - name: Upload EX5 Binary
         uses: actions/upload-artifact@v4

@@ -16,6 +16,7 @@ jobs:
         uses: fx31337/mql-compile-action@master
         with:
           include: '.'
+          init-platform: true
 
       - name: Upload EX5 Binary
         uses: actions/upload-artifact@v4

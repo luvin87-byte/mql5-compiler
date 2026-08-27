@@ -23,8 +23,6 @@ jobs:
           if ($len -lt 100000) { throw "Bad installer download ($len bytes)" }
 
           New-Item -ItemType Directory -Force -Path C:\MT5 | Out-Null
-
-          # Do NOT use -Wait. The stub exits while a child still downloads.
           $p = Start-Process -FilePath $setup -ArgumentList '/auto','/path:C:\MT5' -PassThru
           Write-Host "Stub PID $($p.Id)"
 
@@ -40,40 +38,60 @@ jobs:
             Start-Sleep -Seconds 15
           }
 
-          if (-not $editor) {
-            Write-Host "==== C:\MT5 ===="
-            Get-ChildItem C:\MT5 -Force -ErrorAction SilentlyContinue
-            throw "metaeditor64.exe not found after 10 minutes"
-          }
+          if (-not $editor) { throw "metaeditor64.exe not found after 10 minutes" }
 
+          $root = $editor.Directory.FullName
           Write-Host "FOUND $($editor.FullName)"
-          echo "MT_PATH=$($editor.Directory.FullName)" >> $env:GITHUB_ENV
+          Add-Content -Path $env:GITHUB_ENV -Value "MT_PATH=$root" -Encoding utf8
 
       - name: Compile MQL5
         shell: pwsh
         run: |
-          $mte = Join-Path $env:MT_PATH 'metaeditor64.exe'
-          $src = 'SENTINEL1_26.mq5'
-          if (-not (Test-Path $src)) {
-            Get-ChildItem -Recurse -Filter *.mq5 | Select-Object FullName
-            throw "Cannot find $src"
+          $ErrorActionPreference = 'Stop'
+          $root = $env:MT_PATH
+          $mte  = Join-Path $root 'metaeditor64.exe'
+          Write-Host "MT_PATH=$root"
+          if (-not (Test-Path $mte)) { throw "Compiler missing: $mte" }
+
+          $src = Join-Path $pwd 'SENTINEL1_26.mq5'
+          if (-not (Test-Path $src)) { throw "Cannot find $src" }
+
+          # Standard library lives in MQL5 next to the terminal (portable) or in AppData
+          $trade = Get-ChildItem -Path $root, "$env:APPDATA\MetaQuotes" `
+            -Recurse -Filter 'Trade.mqh' -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+          if (-not $trade) {
+            Write-Host "Trade.mqh missing — launching terminal once to unpack includes"
+            $term = Join-Path $root 'terminal64.exe'
+            if (Test-Path $term) {
+              $tp = Start-Process -FilePath $term -ArgumentList '/portable' -PassThru
+              Start-Sleep -Seconds 25
+              if (-not $tp.HasExited) { Stop-Process -Id $tp.Id -Force -ErrorAction SilentlyContinue }
+            }
+            $trade = Get-ChildItem -Path $root, "$env:APPDATA\MetaQuotes" `
+              -Recurse -Filter 'Trade.mqh' -ErrorAction SilentlyContinue |
+              Select-Object -First 1
           }
+          if (-not $trade) { throw "Standard library not found (Trade.mqh). EA cannot compile." }
+
+          # /inc must be the MQL5 folder (parent of Include)
+          $inc = $trade.Directory.Parent.FullName
+          Write-Host "Using include dir: $inc"
 
           $log = Join-Path $pwd 'mql.log'
-          $inc = Join-Path $env:MT_PATH 'MQL5'
-          $args = @('/portable', "/compile:$src", "/log:$log")
-          if (Test-Path $inc) { $args += "/inc:$inc" }
-
-          Write-Host "Running: $mte $($args -join ' ')"
-          & $mte @args
+          $cmd = "`"$mte`" /compile:`"$src`" /inc:`"$inc`" /log:`"$log`""
+          Write-Host "Running: $cmd"
+          cmd /c $cmd
           Write-Host "metaeditor exit: $LASTEXITCODE"
 
           if (Test-Path $log) {
             Write-Host "===== compile log ====="
             Get-Content $log -Encoding Unicode
+          } else {
+            Write-Host "No mql.log was written"
           }
 
-          $ex5 = [IO.Path]::ChangeExtension((Resolve-Path $src), '.ex5')
+          $ex5 = [IO.Path]::ChangeExtension($src, '.ex5')
           if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
           Write-Host "Built \( ex5 ( \)((Get-Item $ex5).Length) bytes)"
 

@@ -1,4 +1,4 @@
-name: Build MQL5
+name: build
 
 on:
   workflow_dispatch:
@@ -7,23 +7,30 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Install MetaTrader 5
-        shell: pwsh
-        run: |
-          Invoke-WebRequest -Uri "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe" -OutFile "mt5setup.exe"
-          Start-Process -FilePath "mt5setup.exe" -ArgumentList "/auto" -Wait
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - name: Compile MQL5
+      - name: Download MetaEditor Engine
         shell: pwsh
-        env:
-          MT_PATH: "C:\\Program Files\\MetaTrader 5"
         run: |
+          $url = "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          $output = "mt5setup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Write-Host "MetaEditor not found locally. Downloading portable package..."
+          Start-Process -FilePath $output -ArgumentList "/auto" -Wait
+          echo "MT_PATH=C:\Program Files\MetaTrader 5" >> $env:GITHUB_ENV
+
+      - name: Direct MetaEditor Compile
+        shell: pwsh
+        run: |
+          $src = "SENTINEL1_26.mq5"
           $root = $env:MT_PATH
-          $mte  = Join-Path $root 'metaeditor64.exe'
-          Write-Host "MT_PATH=$root"
+          if (-not $root) {
+              $root = "C:\Program Files\MetaTrader 5"
+          }
+          $mte = Join-Path $root 'metaeditor64.exe'
           if (-not (Test-Path $mte)) { throw "Compiler missing: $mte" }
 
-          $src = Join-Path $pwd 'SENTINEL1_26.mq5'
           if (-not (Test-Path $src)) { throw "Cannot find $src" }
 
           $trade = Get-ChildItem -Path $root, "$env:APPDATA\MetaQuotes" -Recurse -Filter 'Trade.mqh' -ErrorAction SilentlyContinue |
@@ -35,7 +42,7 @@ jobs:
           Write-Host "Using include dir: $inc"
 
           $log = Join-Path $pwd 'mql.log'
-          $cmd = '"{0}" /compile:"{1}" /inc:"{2}" /log:"{3}"' -f $mte, $src, $inc, $log
+          $cmd = '"{0}" /compile:"{1}" /inc:"{2}" /log:"{3}"' -f $mte, (Join-Path $pwd $src), $inc, $log
           Write-Host "Running: $cmd"
           cmd /c $cmd
           Write-Host "metaeditor exit: $LASTEXITCODE"
@@ -45,6 +52,6 @@ jobs:
             Get-Content $log -Encoding Unicode
           }
 
-          $ex5 = [IO.Path]::ChangeExtension($src, '.ex5')
+          $ex5 = [IO.Path]::ChangeExtension((Join-Path $pwd $src), '.ex5')
           if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
           Write-Host ('Built {0} ({1} bytes)' -f $ex5, (Get-Item $ex5).Length)

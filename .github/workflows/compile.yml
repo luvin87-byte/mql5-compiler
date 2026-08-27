@@ -1,30 +1,18 @@
-name: MQL5 Auto Compiler
-
-on:
-  push:
-    branches: [ main, master ]
-  workflow_dispatch:
+name: Compile MT5 EAs
+on: [push]
 
 jobs:
   compile:
     runs-on: windows-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup MetaTrader 5
-        uses: fx31337/mql-setup-action@v1
-        with:
-          mt-version: 5
-
       - name: Compile MQL5
-        uses: fx31337/mql-compile-action@v2
+        uses: fx31337/mql-compile-action@master
         with:
-          include: '.'
           init-platform: true
-
-      - name: Upload EX5 Binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: Compiled_EA
-          path: '**/*.ex5'
+          include: '.'
+          # Replace this with the actual path to your .mq5 file
+          path: 'Experts/MyXAUUSDBot.mq5'
+          verbose: true

@@ -8,38 +8,78 @@ on:
 jobs:
   compile:
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Download MetaEditor Engine
+      - name: Install MetaTrader 5
         shell: pwsh
         run: |
-          # Download a portable lightweight compiler toolkit package
-          $zipUrl = "https://github.com/fx31337/mql-compile-action/releases/download/v2.0.0/metaeditor.zip"
-          # Alternatively, we can download a verified standalone archive or use direct extraction.
-          # Let's use a direct reliable mirror or set up the compiler directory:
-          New-Item -ItemType Directory -Force -Path C:\MT5 | Out-Null
-          
-          # Since the web installer fails, let's download a direct portable build or use curl to fetch metaeditor components
-          Write-Host "Setting up compilation directory..."
+          $setup = Join-Path $env:RUNNER_TEMP 'mt5setup.exe'
+          curl.exe -L --fail -o $setup "https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe"
+          $len = (Get-Item $setup).Length
+          Write-Host "Installer size: $len bytes"
+          if ($len -lt 100000) { throw "Bad installer download ($len bytes)" }
 
-      - name: Direct MetaEditor Compile
+          New-Item -ItemType Directory -Force -Path C:\MT5 | Out-Null
+
+          # Do NOT use -Wait. The stub exits while a child still downloads.
+          $p = Start-Process -FilePath $setup -ArgumentList '/auto','/path:C:\MT5' -PassThru
+          Write-Host "Stub PID $($p.Id)"
+
+          $deadline = (Get-Date).AddMinutes(10)
+          $editor = $null
+          while ((Get-Date) -lt $deadline) {
+            $editor = Get-ChildItem -Path C:\MT5,'C:\Program Files','C:\Program Files (x86)' `
+              -Recurse -Filter metaeditor64.exe -ErrorAction SilentlyContinue |
+              Select-Object -First 1
+            if ($editor) { break }
+            if ($p.HasExited) { Write-Host "Stub exited $($p.ExitCode). Waiting for files..." }
+            else { Write-Host "Stub still running..." }
+            Start-Sleep -Seconds 15
+          }
+
+          if (-not $editor) {
+            Write-Host "==== C:\MT5 ===="
+            Get-ChildItem C:\MT5 -Force -ErrorAction SilentlyContinue
+            throw "metaeditor64.exe not found after 10 minutes"
+          }
+
+          Write-Host "FOUND $($editor.FullName)"
+          echo "MT_PATH=$($editor.Directory.FullName)" >> $env:GITHUB_ENV
+
+      - name: Compile MQL5
         shell: pwsh
         run: |
-          $src = "SENTINEL1_26.mq5"
+          $mte = Join-Path $env:MT_PATH 'metaeditor64.exe'
+          $src = 'SENTINEL1_26.mq5'
           if (-not (Test-Path $src)) {
-              throw "Source file $src not found in repository root!"
+            Get-ChildItem -Recurse -Filter *.mq5 | Select-Object FullName
+            throw "Cannot find $src"
           }
-          
-          # Let's search if metaeditor exists anywhere on the runner or download a direct archive
-          $editor = Get-ChildItem -Path "C:\Program Files", "C:\Program Files (x86)", "C:\MT5" -Recurse -Filter "metaeditor64.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          
-          if (-not $editor) {
-              Write-Host "MetaEditor not found locally. Downloading portable package..."
-              $compilerZip = "$env:RUNNER_TEMP\metaeditor.zip"
-              
-              # Fallback: Download a direct community-hosted portable metaeditor archive
-              $portableUrl = "https://github.com/fx31337/mql-compile-action/raw/main/bin/metaeditor64.exe"
-              # Let's use curl to fetch the compiler binary directly if available, or download via official channels
+
+          $log = Join-Path $pwd 'mql.log'
+          $inc = Join-Path $env:MT_PATH 'MQL5'
+          $args = @('/portable', "/compile:$src", "/log:$log")
+          if (Test-Path $inc) { $args += "/inc:$inc" }
+
+          Write-Host "Running: $mte $($args -join ' ')"
+          & $mte @args
+          Write-Host "metaeditor exit: $LASTEXITCODE"
+
+          if (Test-Path $log) {
+            Write-Host "===== compile log ====="
+            Get-Content $log -Encoding Unicode
           }
+
+          $ex5 = [IO.Path]::ChangeExtension((Resolve-Path $src), '.ex5')
+          if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
+          Write-Host "Built \( ex5 ( \)((Get-Item $ex5).Length) bytes)"
+
+      - name: Upload EX5 Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: Compiled_EA
+          path: '**/*.ex5'
+          if-no-files-found: error

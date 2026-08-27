@@ -6,13 +6,19 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    env:
-      MT_PATH: "C:\\Program Files\\MetaTrader 5"
     steps:
       - name: Compile MQL5
         shell: pwsh
         run: |
-          $root = $env:MT_PATH
+          $root = if ($env:MT_PATH) { 
+              $env:MT_PATH 
+          } elseif (Test-Path "C:\Program Files\MetaTrader 5\metaeditor64.exe") { 
+              "C:\Program Files\MetaTrader 5" 
+          } elseif (Test-Path "C:\Program Files (x86)\MetaTrader 5\metaeditor64.exe") { 
+              "C:\Program Files (x86)\MetaTrader 5" 
+          } else { 
+              throw "MT_PATH environment variable is not set and MetaTrader 5 could not be found in default locations." 
+          }
           $mte  = Join-Path $root 'metaeditor64.exe'
           Write-Host "MT_PATH=$root"
           if (-not (Test-Path $mte)) { throw "Compiler missing: $mte" }

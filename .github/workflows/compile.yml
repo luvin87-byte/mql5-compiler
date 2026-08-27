@@ -18,6 +18,7 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile $output
           Write-Host "MetaEditor not found locally. Downloading portable package..."
           Start-Process -FilePath $output -ArgumentList "/auto" -Wait
+          Start-Sleep -Seconds 99
           echo "MT_PATH=C:\Program Files\MetaTrader 5" >> $env:GITHUB_ENV
 
       - name: Direct MetaEditor Compile

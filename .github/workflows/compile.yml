@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      MT_PATH: "C:\\Program Files\\MetaTrader 5"
     steps:
       - name: Compile MQL5
         shell: pwsh

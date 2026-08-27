@@ -13,10 +13,11 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Compile MQL5
-        uses: fx31337/mql-compile-action@v2
+        uses: fx31337/mql-compile-action@master
         with:
           include: '.'
           init-platform: true
+          mt-version: 5.0.0.2515
 
       - name: Upload EX5 Binary
         uses: actions/upload-artifact@v4

@@ -56,8 +56,8 @@ jobs:
           if (-not (Test-Path $ex5)) { throw "Compile failed: no .ex5 produced" }
           Write-Host ('Built {0} ({1} bytes)' -f $ex5, (Get-Item $ex5).Length)
 
-      - name: Upload .ex5 Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: compiled-mql5
-          path: '*.ex5'
+          name: SENTINEL1_26
+          path: SENTINEL1_26.ex5
